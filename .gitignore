@@ -45,7 +45,6 @@ yarn-error.*
 LA_Crime_2024.csv
 src/services/firebase.ts
 
-
 serviceAccountKey.json
 scripts/serviceAccountKey.json
 **/*serviceAccountKey.json
