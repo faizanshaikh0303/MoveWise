@@ -44,3 +44,13 @@ serviceAccountKey.json
 *.csv
 scripts/serviceAccountKey.json
 LA_Crime_2024.csv
+
+src/services/firebase.ts
+serviceAccountKey.json
+scripts/serviceAccountKey.json
+
+# Import progress
+scripts/import_progress.json
+
+# CSV data files
+*.csv
