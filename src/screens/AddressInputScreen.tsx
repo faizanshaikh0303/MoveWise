@@ -14,11 +14,13 @@ import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplet
 import { GOOGLE_MAPS_API_KEY } from '@env';
 import AddressMap from '../components/AddressMap';
 import { saveComparison } from '../services/comparisonService';
+import { useUserProfile } from '../context/UserProfileContext';
 
 // Suppress the VirtualizedList warning for GooglePlacesAutocomplete
 LogBox.ignoreLogs([
   'VirtualizedLists should never be nested inside plain ScrollViews',
 ]);
+
 type Props = {
   navigation: any;
 };
@@ -30,6 +32,9 @@ interface AddressDetails {
 }
 
 export default function AddressInputScreen({ navigation }: Props) {
+  const { profileData } = useUserProfile();
+  console.log('✅ AI Context working! Data:', profileData);
+  const { updateAddresses } = useUserProfile();
   const [currentAddress, setCurrentAddress] = useState<AddressDetails | null>(null);
   const [newAddress, setNewAddress] = useState<AddressDetails | null>(null);
   
@@ -65,6 +70,13 @@ export default function AddressInputScreen({ navigation }: Props) {
 
     console.log('📏 Distance calculated:', distance);
 
+    // Save to context
+    updateAddresses({
+      current: currentAddress,
+      new: newAddress,
+      distance: parseFloat(distance.toFixed(1)),
+    });
+
     // Try to save with timeout - don't wait forever
     const savePromise = saveComparison({
         currentAddress,
@@ -87,7 +99,7 @@ export default function AddressInputScreen({ navigation }: Props) {
     console.log('🚀 Navigating to WorkSchedule...');
     navigation.navigate('WorkSchedule');
     console.log('✅ Navigation called');
-    };
+  };
 
   // Haversine formula to calculate distance between two coordinates
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -113,7 +125,7 @@ export default function AddressInputScreen({ navigation }: Props) {
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Compare Locations</Text>
-        <Text style={styles.headerSubtitle}>Step 1 of 3</Text>
+        <Text style={styles.headerSubtitle}>Step 1 of 4</Text>
       </View>
 
       <KeyboardAvoidingView 
@@ -328,7 +340,7 @@ export default function AddressInputScreen({ navigation }: Props) {
         >
           <Text style={styles.continueButtonText}>
             {currentAddress && newAddress
-              ? 'Continue to Lifestyle Questions'
+              ? 'Continue to Work Schedule'
               : 'Select Both Addresses'}
           </Text>
         </TouchableOpacity>

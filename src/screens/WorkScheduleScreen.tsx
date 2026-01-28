@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { useUserProfile } from '../context/UserProfileContext';
 
 type Props = {
   navigation: any;
@@ -23,6 +24,9 @@ const COMMUTE_METHODS = [
 ];
 
 export default function WorkScheduleScreen({ navigation }: Props) {
+  const { profileData } = useUserProfile();
+  console.log('✅ WS Context working! Data:', profileData);
+  const { updateWork } = useUserProfile();
   const [workLocation, setWorkLocation] = useState('');
   const [workFromHome, setWorkFromHome] = useState(false);
   const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
@@ -50,7 +54,7 @@ export default function WorkScheduleScreen({ navigation }: Props) {
     }
 
     const workData = {
-      workLocation: workFromHome ? 'Work from home' : workLocation,
+      location: workFromHome ? 'Work from home' : workLocation,
       workDays: selectedDays,
       workHours: { start: startTime, end: endTime },
       commuteMethod: workFromHome ? 'none' : commuteMethod,
@@ -58,8 +62,11 @@ export default function WorkScheduleScreen({ navigation }: Props) {
 
     console.log('Work data:', workData);
     
-    // TODO: Navigate to next screen (Sleep Schedule)
-    Alert.alert('Work Schedule Saved!', 'Next: Sleep & Rest schedule');
+    // Save to context
+    updateWork(workData);
+    
+    // Navigate to Sleep Schedule screen
+    navigation.navigate('SleepSchedule');
   };
 
   return (
