@@ -7,7 +7,10 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  Platform,
+  Modal,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useUserProfile } from '../context/UserProfileContext';
 
 type Props = {
@@ -21,18 +24,30 @@ const COMMUTE_METHODS = [
   { id: 'biking', label: 'Biking', icon: '🚴' },
   { id: 'walking', label: 'Walking', icon: '🚶' },
   { id: 'varies', label: 'Varies', icon: '🔄' },
+  { id: 'none', label: 'No Commute', icon: '🏠' },
 ];
 
 export default function WorkScheduleScreen({ navigation }: Props) {
-  const { profileData } = useUserProfile();
-  console.log('✅ WS Context working! Data:', profileData);
   const { updateWork } = useUserProfile();
   const [workLocation, setWorkLocation] = useState('');
   const [workFromHome, setWorkFromHome] = useState(false);
   const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('17:00');
+  
+  // Time states as Date objects
+  const [startTime, setStartTime] = useState(new Date(2024, 0, 1, 9, 0));
+  const [endTime, setEndTime] = useState(new Date(2024, 0, 1, 17, 0));
+  
   const [commuteMethod, setCommuteMethod] = useState<string>('driving');
+
+  // Modal states for iOS
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+
+  const formatTime = (date: Date): string => {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
 
   const toggleDay = (day: string) => {
     if (selectedDays.includes(day)) {
@@ -56,71 +71,170 @@ export default function WorkScheduleScreen({ navigation }: Props) {
     const workData = {
       location: workFromHome ? 'Work from home' : workLocation,
       workDays: selectedDays,
-      workHours: { start: startTime, end: endTime },
+      workHours: {
+        start: formatTime(startTime),
+        end: formatTime(endTime),
+      },
       commuteMethod: workFromHome ? 'none' : commuteMethod,
     };
 
     console.log('Work data:', workData);
-    
-    // Save to context
     updateWork(workData);
-    
-    // Navigate to Sleep Schedule screen
     navigation.navigate('SleepSchedule');
+  };
+
+  const calculateWorkHours = (start: Date, end: Date): string => {
+    let startMinutes = start.getHours() * 60 + start.getMinutes();
+    let endMinutes = end.getHours() * 60 + end.getMinutes();
+    
+    if (endMinutes <= startMinutes) {
+      endMinutes += 24 * 60;
+    }
+    
+    const totalMinutes = endMinutes - startMinutes;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    
+    return `${hours}h ${minutes}m`;
+  };
+
+  const renderTimePicker = (
+    label: string,
+    value: Date,
+    onChange: (date: Date) => void,
+    showPicker: boolean,
+    setShowPicker: (show: boolean) => void,
+    icon: string
+  ) => {
+    return (
+      <View style={styles.timePickerContainer}>
+        <Text style={styles.timeLabel}>{icon} {label}</Text>
+        <TouchableOpacity
+          style={styles.timeButton}
+          onPress={() => setShowPicker(true)}
+        >
+          <Text style={styles.timeButtonText}>{formatTime(value)}</Text>
+        </TouchableOpacity>
+
+        {Platform.OS === 'ios' ? (
+          <Modal
+            visible={showPicker}
+            transparent={true}
+            animationType="fade"
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity onPress={() => setShowPicker(false)}>
+                    <Text style={styles.modalCancel}>Cancel</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>{label}</Text>
+                  <TouchableOpacity onPress={() => setShowPicker(false)}>
+                    <Text style={styles.modalDone}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={value}
+                  mode="time"
+                  display="spinner"
+                  onChange={(event, selectedDate) => {
+                    if (selectedDate) {
+                      onChange(selectedDate);
+                    }
+                  }}
+                  style={styles.timePicker}
+                  textColor="#000"
+                />
+              </View>
+            </View>
+          </Modal>
+        ) : (
+          showPicker && (
+            <DateTimePicker
+              value={value}
+              mode="time"
+              display="default"
+              onChange={(event, selectedDate) => {
+                setShowPicker(false);
+                if (selectedDate) {
+                  onChange(selectedDate);
+                }
+              }}
+            />
+          )
+        )}
+      </View>
+    );
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Work & Commute</Text>
+        <Text style={styles.headerTitle}>Work Schedule</Text>
         <Text style={styles.headerSubtitle}>Step 2 of 4</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Work Location */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Work Location Section */}
         <View style={styles.section}>
-          <Text style={styles.label}>💼 Where do you work?</Text>
-          
+          <Text style={styles.sectionTitle}>Where do you work?</Text>
+
           <TouchableOpacity
-            style={[styles.checkbox, workFromHome && styles.checkboxActive]}
+            style={styles.wfhToggle}
             onPress={() => setWorkFromHome(!workFromHome)}
           >
-            <Text style={styles.checkboxText}>
-              {workFromHome ? '✓ ' : ''}Work from home
-            </Text>
+            <View style={styles.wfhToggleLeft}>
+              <Text style={styles.wfhToggleIcon}>🏠</Text>
+              <View>
+                <Text style={styles.wfhToggleTitle}>Work from home</Text>
+                <Text style={styles.wfhToggleSubtitle}>
+                  {workFromHome ? 'No commute needed' : 'Tap if you work remotely'}
+                </Text>
+              </View>
+            </View>
+            <View style={[styles.switch, workFromHome && styles.switchActive]}>
+              <View style={[styles.switchThumb, workFromHome && styles.switchThumbActive]} />
+            </View>
           </TouchableOpacity>
 
           {!workFromHome && (
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Downtown LA, 123 Main St"
-              value={workLocation}
-              onChangeText={setWorkLocation}
-            />
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Work Address</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter your work address..."
+                placeholderTextColor="#999"
+                value={workLocation}
+                onChangeText={setWorkLocation}
+              />
+            </View>
           )}
         </View>
 
-        {/* Work Days */}
+        {/* Work Days Section */}
         <View style={styles.section}>
-          <Text style={styles.label}>📅 Which days do you work?</Text>
-          <View style={styles.daysContainer}>
-            {WORK_DAYS.map(day => (
+          <Text style={styles.sectionTitle}>Which days do you work?</Text>
+          <View style={styles.daysGrid}>
+            {WORK_DAYS.map((day) => (
               <TouchableOpacity
                 key={day}
                 style={[
-                  styles.dayPill,
-                  selectedDays.includes(day) && styles.dayPillActive
+                  styles.dayButton,
+                  selectedDays.includes(day) && styles.dayButtonActive,
                 ]}
                 onPress={() => toggleDay(day)}
               >
                 <Text
                   style={[
-                    styles.dayText,
-                    selectedDays.includes(day) && styles.dayTextActive
+                    styles.dayButtonText,
+                    selectedDays.includes(day) && styles.dayButtonTextActive,
                   ]}
                 >
                   {day}
@@ -128,63 +242,50 @@ export default function WorkScheduleScreen({ navigation }: Props) {
               </TouchableOpacity>
             ))}
           </View>
-
-          <View style={styles.presetButtons}>
-            <TouchableOpacity
-              style={styles.presetButton}
-              onPress={() => setSelectedDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'])}
-            >
-              <Text style={styles.presetButtonText}>Weekdays</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.presetButton}
-              onPress={() => setSelectedDays(['Sat', 'Sun'])}
-            >
-              <Text style={styles.presetButtonText}>Weekends</Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
-        {/* Work Hours */}
+        {/* Work Hours Section */}
         <View style={styles.section}>
-          <Text style={styles.label}>⏰ What are your typical work hours?</Text>
-          <View style={styles.timeContainer}>
-            <View style={styles.timeInputWrapper}>
-              <Text style={styles.timeLabel}>Start</Text>
-              <TextInput
-                style={styles.timeInput}
-                placeholder="09:00"
-                value={startTime}
-                onChangeText={setStartTime}
-                keyboardType="numbers-and-punctuation"
-              />
-            </View>
-            <Text style={styles.timeSeparator}>→</Text>
-            <View style={styles.timeInputWrapper}>
-              <Text style={styles.timeLabel}>End</Text>
-              <TextInput
-                style={styles.timeInput}
-                placeholder="17:00"
-                value={endTime}
-                onChangeText={setEndTime}
-                keyboardType="numbers-and-punctuation"
-              />
-            </View>
+          <Text style={styles.sectionTitle}>What are your work hours?</Text>
+          
+          <View style={styles.timesRow}>
+            {renderTimePicker(
+              'Start Time',
+              startTime,
+              setStartTime,
+              showStartTimePicker,
+              setShowStartTimePicker,
+              '🕐'
+            )}
+
+            {renderTimePicker(
+              'End Time',
+              endTime,
+              setEndTime,
+              showEndTimePicker,
+              setShowEndTimePicker,
+              '🕔'
+            )}
           </View>
-          <Text style={styles.helperText}>Use 24-hour format (e.g., 09:00, 17:00)</Text>
+
+          <View style={styles.workSummary}>
+            <Text style={styles.workSummaryText}>
+              ⏱️ You work {calculateWorkHours(startTime, endTime)} per day
+            </Text>
+          </View>
         </View>
 
-        {/* Commute Method */}
+        {/* Commute Method Section */}
         {!workFromHome && (
           <View style={styles.section}>
-            <Text style={styles.label}>🚗 How do you commute?</Text>
-            <View style={styles.commuteContainer}>
-              {COMMUTE_METHODS.map(method => (
+            <Text style={styles.sectionTitle}>How do you commute?</Text>
+            <View style={styles.commuteGrid}>
+              {COMMUTE_METHODS.filter(m => m.id !== 'none').map((method) => (
                 <TouchableOpacity
                   key={method.id}
                   style={[
-                    styles.commuteCard,
-                    commuteMethod === method.id && styles.commuteCardActive
+                    styles.commuteButton,
+                    commuteMethod === method.id && styles.commuteButtonActive,
                   ]}
                   onPress={() => setCommuteMethod(method.id)}
                 >
@@ -192,7 +293,7 @@ export default function WorkScheduleScreen({ navigation }: Props) {
                   <Text
                     style={[
                       styles.commuteLabel,
-                      commuteMethod === method.id && styles.commuteLabelActive
+                      commuteMethod === method.id && styles.commuteLabelActive,
                     ]}
                   >
                     {method.label}
@@ -203,18 +304,13 @@ export default function WorkScheduleScreen({ navigation }: Props) {
           </View>
         )}
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {/* Continue Button */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity
-          style={styles.continueButton}
-          onPress={handleContinue}
-        >
-          <Text style={styles.continueButtonText}>Continue to Sleep Schedule</Text>
+        {/* Continue Button */}
+        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
+          <Text style={styles.continueButtonText}>Continue →</Text>
         </TouchableOpacity>
-      </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </View>
   );
 }
@@ -222,19 +318,18 @@ export default function WorkScheduleScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   header: {
-    backgroundColor: '#4A90E2',
-    paddingTop: 50,
+    backgroundColor: '#FF6B6B',
+    paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
   },
   backButton: {
-    color: 'white',
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 10,
+    color: 'white',
+    marginBottom: 12,
   },
   headerTitle: {
     fontSize: 28,
@@ -245,166 +340,250 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: 'white',
-    opacity: 0.8,
+    opacity: 0.9,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 20,
   },
   section: {
-    marginBottom: 30,
+    marginBottom: 24,
   },
-  label: {
-    fontSize: 18,
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  wfhToggle: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  wfhToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  wfhToggleIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  wfhToggleTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 12,
   },
-  helperText: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 6,
+  wfhToggleSubtitle: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
   },
-  checkbox: {
-    backgroundColor: 'white',
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    marginBottom: 12,
-  },
-  checkboxActive: {
-    borderColor: '#4A90E2',
-    backgroundColor: '#E3F2FD',
-  },
-  checkboxText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  input: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 10,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  daysContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  dayPill: {
-    backgroundColor: 'white',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#ddd',
-  },
-  dayPillActive: {
-    backgroundColor: '#4A90E2',
-    borderColor: '#4A90E2',
-  },
-  dayText: {
-    fontSize: 15,
-    color: '#333',
-    fontWeight: '500',
-  },
-  dayTextActive: {
-    color: 'white',
-  },
-  presetButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  presetButton: {
-    flex: 1,
-    backgroundColor: '#E0E0E0',
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  presetButtonText: {
-    fontSize: 14,
-    color: '#555',
-    fontWeight: '500',
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  switch: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#ccc',
+    padding: 2,
     justifyContent: 'center',
   },
-  timeInputWrapper: {
+  switchActive: {
+    backgroundColor: '#4CAF50',
+  },
+  switchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  switchThumbActive: {
+    transform: [{ translateX: 22 }],
+  },
+  inputContainer: {
+    marginTop: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    color: '#333',
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  dayButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+  },
+  dayButtonActive: {
+    backgroundColor: '#FF6B6B',
+    borderColor: '#FF6B6B',
+  },
+  dayButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dayButtonTextActive: {
+    color: 'white',
+  },
+  timesRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  timePickerContainer: {
     flex: 1,
   },
   timeLabel: {
     fontSize: 14,
+    fontWeight: '600',
     color: '#666',
-    marginBottom: 6,
-  },
-  timeInput: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 10,
-    fontSize: 18,
-    textAlign: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    fontWeight: '500',
-  },
-  timeSeparator: {
-    fontSize: 24,
-    color: '#4A90E2',
-    marginHorizontal: 16,
-  },
-  commuteContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  commuteCard: {
-    width: '48%',
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#ddd',
-  },
-  commuteCardActive: {
-    borderColor: '#4A90E2',
-    backgroundColor: '#E3F2FD',
-  },
-  commuteIcon: {
-    fontSize: 32,
     marginBottom: 8,
   },
-  commuteLabel: {
+  timeButton: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  timeButtonText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  workSummary: {
+    backgroundColor: '#FFF3E0',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  workSummaryText: {
     fontSize: 14,
+    color: '#E65100',
+    fontWeight: '600',
+  },
+  commuteGrid: {
+    gap: 12,
+  },
+  commuteButton: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+  },
+  commuteButtonActive: {
+    borderColor: '#FF6B6B',
+    backgroundColor: '#FFF5F5',
+  },
+  commuteIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  commuteLabel: {
+    fontSize: 16,
     color: '#333',
     fontWeight: '500',
   },
   commuteLabelActive: {
-    color: '#4A90E2',
+    color: '#FF6B6B',
     fontWeight: '600',
   },
-  bottomContainer: {
-    padding: 20,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
   continueButton: {
-    backgroundColor: '#4A90E2',
-    padding: 16,
+    backgroundColor: '#FF6B6B',
+    padding: 18,
     borderRadius: 12,
     alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   continueButtonText: {
     color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  // iOS Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalCancel: {
+    fontSize: 16,
+    color: '#999',
+  },
+  modalTitle: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#333',
+  },
+  modalDone: {
+    fontSize: 16,
+    color: '#FF6B6B',
+    fontWeight: '600',
+  },
+  timePicker: {
+    height: 200,
   },
 });

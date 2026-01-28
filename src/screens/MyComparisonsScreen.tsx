@@ -1,200 +1,146 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  Alert,
+  SafeAreaView,
+  ScrollView,
 } from 'react-native';
-import { getSavedComparisons, SavedComparison } from '../services/comparisonService';
 
 type Props = {
   navigation: any;
 };
 
 export default function MyComparisonsScreen({ navigation }: Props) {
-  const [comparisons, setComparisons] = useState<SavedComparison[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    loadComparisons();
-  }, []);
-
-  const loadComparisons = async () => {
-    try {
-      const data = await getSavedComparisons();
-      setComparisons(data);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load comparisons');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadComparisons();
-  };
-
-  const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-    
-    return date.toLocaleDateString();
-  };
-
-  const renderComparison = ({ item }: { item: SavedComparison }) => (
-    <TouchableOpacity 
-      style={styles.comparisonCard}
-      onPress={() => {
-        Alert.alert(
-          'Comparison Details',
-          `From: ${item.currentAddress.description}\n\nTo: ${item.newAddress.description}\n\nDistance: ${item.distance} miles\n\nSaved: ${formatDate(item.timestamp)}`
-        );
-      }}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.addressBadge}>
-          <Text style={styles.badgeText}>📍 Current</Text>
-        </View>
-        <Text style={styles.timeText}>{formatDate(item.timestamp)}</Text>
-      </View>
-      
-      <Text style={styles.addressText} numberOfLines={2}>
-        {item.currentAddress.description}
-      </Text>
-
-      <View style={styles.arrow}>
-        <Text style={styles.arrowText}>↓</Text>
-      </View>
-
-      <View style={styles.addressBadge}>
-        <Text style={[styles.badgeText, { color: '#E65100' }]}>🎯 New</Text>
-      </View>
-      
-      <Text style={styles.addressText} numberOfLines={2}>
-        {item.newAddress.description}
-      </Text>
-
-      <View style={styles.distanceCard}>
-        <Text style={styles.distanceText}>📏 {item.distance} miles apart</Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>My Comparisons</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4A90E2" />
-          <Text style={styles.loadingText}>Loading your comparisons...</Text>
-        </View>
-      </View>
-    );
-  }
+  // Placeholder - you can implement saved comparisons later
+  // Could integrate with Firestore to save/load user comparisons
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>My Comparisons</Text>
-        <Text style={styles.subtitle}>{comparisons.length} saved</Text>
+        <Text style={styles.headerTitle}>My Comparisons</Text>
       </View>
 
-      {comparisons.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>📋</Text>
-          <Text style={styles.emptyTitle}>No Comparisons Yet</Text>
-          <Text style={styles.emptyText}>
-            Start comparing addresses to see your history here
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Empty State */}
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateIcon}>📋</Text>
+          <Text style={styles.emptyStateTitle}>No Saved Comparisons Yet</Text>
+          <Text style={styles.emptyStateText}>
+            Your saved move comparisons will appear here. Complete an analysis to save your first comparison!
           </Text>
+          
           <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('AddressInput')}
+            style={styles.primaryButton}
+            onPress={() => navigation.navigate('Home')}
           >
-            <Text style={styles.addButtonText}>+ New Comparison</Text>
+            <Text style={styles.primaryButtonText}>Start New Comparison</Text>
           </TouchableOpacity>
         </View>
-      ) : (
-        <FlatList
-          data={comparisons}
-          renderItem={renderComparison}
-          keyExtractor={(item) => item.id || Math.random().toString()}
-          contentContainerStyle={styles.listContent}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-        />
-      )}
-    </View>
+
+        {/* Future: List of saved comparisons */}
+        {/* 
+        <View style={styles.comparisonCard}>
+          <View style={styles.comparisonHeader}>
+            <Text style={styles.comparisonTitle}>Malibu → Los Molinos</Text>
+            <Text style={styles.comparisonDate}>Jan 28, 2026</Text>
+          </View>
+          <View style={styles.comparisonMeta}>
+            <Text style={styles.comparisonScore}>AI Score: 8.0/10</Text>
+            <Text style={styles.comparisonRecommendation}>Recommended ✓</Text>
+          </View>
+          <TouchableOpacity style={styles.viewButton}>
+            <Text style={styles.viewButtonText}>View Details</Text>
+          </TouchableOpacity>
+        </View>
+        */}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   header: {
-    backgroundColor: '#4A90E2',
-    paddingTop: 50,
+    backgroundColor: 'white',
+    paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   backButton: {
-    color: 'white',
+    marginRight: 16,
+  },
+  backButtonText: {
     fontSize: 16,
+    color: '#4A90E2',
     fontWeight: '600',
-    marginBottom: 10,
   },
-  title: {
-    fontSize: 28,
+  headerTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 4,
+    color: '#1A1A1A',
   },
-  subtitle: {
-    fontSize: 14,
-    color: 'white',
-    opacity: 0.8,
+  content: {
+    flex: 1,
+    padding: 20,
   },
-  loadingContainer: {
+  emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 60,
   },
-  loadingText: {
-    marginTop: 10,
+  emptyStateIcon: {
+    fontSize: 80,
+    marginBottom: 20,
+  },
+  emptyStateTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateText: {
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 40,
+    marginBottom: 32,
   },
-  listContent: {
-    padding: 20,
+  primaryButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#4A90E2',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
+  primaryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // For future saved comparisons:
   comparisonCard: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -202,84 +148,44 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  cardHeader: {
+  comparisonHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  addressBadge: {
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 8,
+  comparisonTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
   },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4A90E2',
-  },
-  timeText: {
-    fontSize: 12,
+  comparisonDate: {
+    fontSize: 14,
     color: '#999',
   },
-  addressText: {
-    fontSize: 15,
-    color: '#333',
-    marginBottom: 8,
-  },
-  arrow: {
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  arrowText: {
-    fontSize: 20,
-    color: '#4A90E2',
-  },
-  distanceCard: {
-    backgroundColor: '#FFF3E0',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  distanceText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#E65100',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyIcon: {
-    fontSize: 64,
+  comparisonMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 16,
+  comparisonScore: {
+    fontSize: 14,
     color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
+    fontWeight: '600',
   },
-  addButton: {
+  comparisonRecommendation: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  viewButton: {
     backgroundColor: '#4A90E2',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
   },
-  addButtonText: {
+  viewButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
 });

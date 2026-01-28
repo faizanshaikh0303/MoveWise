@@ -5,21 +5,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
-  LogBox,
+  ScrollView,
 } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { GOOGLE_MAPS_API_KEY } from '@env';
-import AddressMap from '../components/AddressMap';
-import { saveComparison } from '../services/comparisonService';
 import { useUserProfile } from '../context/UserProfileContext';
-
-// Suppress the VirtualizedList warning for GooglePlacesAutocomplete
-LogBox.ignoreLogs([
-  'VirtualizedLists should never be nested inside plain ScrollViews',
-]);
 
 type Props = {
   navigation: any;
@@ -32,8 +24,6 @@ interface AddressDetails {
 }
 
 export default function AddressInputScreen({ navigation }: Props) {
-  const { profileData } = useUserProfile();
-  console.log('✅ AI Context working! Data:', profileData);
   const { updateAddresses } = useUserProfile();
   const [currentAddress, setCurrentAddress] = useState<AddressDetails | null>(null);
   const [newAddress, setNewAddress] = useState<AddressDetails | null>(null);
@@ -41,34 +31,30 @@ export default function AddressInputScreen({ navigation }: Props) {
   const currentRef = useRef<any>(null);
   const newRef = useRef<any>(null);
 
-  const handleContinue = async () => {
-    console.log('🔵 handleContinue called');
-    
-    // Basic validation
+  const handleContinue = () => {
+    // Validation
     if (!currentAddress) {
-        Alert.alert('Missing Information', 'Please select your current address');
-        return;
+      Alert.alert('Missing Information', 'Please select your current address');
+      return;
     }
     if (!newAddress) {
-        Alert.alert('Missing Information', 'Please select your new address');
-        return;
+      Alert.alert('Missing Information', 'Please select your new address');
+      return;
     }
     if (currentAddress.description.toLowerCase() === newAddress.description.toLowerCase()) {
-        Alert.alert('Same Address', 'Current and new addresses cannot be the same');
-        return;
+      Alert.alert('Same Address', 'Current and new addresses cannot be the same');
+      return;
     }
-
-    console.log('✅ Validation passed');
 
     // Calculate distance
     const distance = calculateDistance(
-        currentAddress.lat,
-        currentAddress.lng,
-        newAddress.lat,
-        newAddress.lng
+      currentAddress.lat,
+      currentAddress.lng,
+      newAddress.lat,
+      newAddress.lng
     );
 
-    console.log('📏 Distance calculated:', distance);
+    console.log('📏 Distance:', distance, 'miles');
 
     // Save to context
     updateAddresses({
@@ -77,38 +63,17 @@ export default function AddressInputScreen({ navigation }: Props) {
       distance: parseFloat(distance.toFixed(1)),
     });
 
-    // Try to save with timeout - don't wait forever
-    const savePromise = saveComparison({
-        currentAddress,
-        newAddress,
-        distance: parseFloat(distance.toFixed(1)),
-    });
-
-    const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Save timeout')), 3000)
-    );
-
-    try {
-        await Promise.race([savePromise, timeoutPromise]);
-        console.log('✅ Comparison saved');
-    } catch (error: any) {
-        console.log('⚠️ Save failed or timed out:', error.message);
-        // Continue anyway
-    }
-
-    console.log('🚀 Navigating to WorkSchedule...');
+    // Navigate to next screen
     navigation.navigate('WorkSchedule');
-    console.log('✅ Navigation called');
   };
 
-  // Haversine formula to calculate distance between two coordinates
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
     const R = 3959; // Earth's radius in miles
     const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
+    const dLng = toRad(lng2 - lng1);
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
@@ -121,47 +86,38 @@ export default function AddressInputScreen({ navigation }: Props) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Compare Locations</Text>
-        <Text style={styles.headerSubtitle}>Step 1 of 4</Text>
+        <Text style={styles.title}>Where are you moving?</Text>
+        <Text style={styles.subtitle}>Let's compare your addresses</Text>
       </View>
 
+      {/* Scrollable Content */}
       <KeyboardAvoidingView 
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Current Address Section */}
-          <View style={[styles.section, styles.firstSection]}>
-            <Text style={styles.label}>📍 Where do you live now?</Text>
-            <Text style={styles.helperText}>Search for your current address in California</Text>
-
+          <View style={styles.content}>
+        {/* Current Address */}
+        <View style={styles.inputSection}>
+          <Text style={styles.label}>📍 Current Address</Text>
+          <Text style={styles.helperText}>Where do you live now?</Text>
+          
+          <View style={styles.autocompleteWrapper}>
             <GooglePlacesAutocomplete
               ref={currentRef}
               placeholder="Start typing your address..."
+              minLength={2}
+              listViewDisplayed="auto"
+              fetchDetails={true}
               onPress={(data, details = null) => {
-                console.log('Selected current:', data.description);
+                console.log('✅ Current address selected:', data.description);
                 if (details) {
-                  // Check if address is in California
-                  const isInCalifornia = details.address_components?.some(
-                    component => 
-                      component.types.includes('administrative_area_level_1') && 
-                      component.short_name === 'CA'
-                  );
-                  
-                  if (!isInCalifornia) {
-                    Alert.alert('California Only', 'Please select an address in California. This app currently only supports California addresses.');
-                    return;
-                  }
-                  
                   setCurrentAddress({
                     description: data.description,
                     lat: details.geometry.location.lat,
@@ -172,73 +128,102 @@ export default function AddressInputScreen({ navigation }: Props) {
               query={{
                 key: GOOGLE_MAPS_API_KEY,
                 language: 'en',
-                types: 'address',
+                components: 'country:us',
               }}
-              fetchDetails={true}
+              requestUrl={{
+                useOnPlatform: 'web',
+                url: 'https://cors-anywhere.herokuapp.com/https://maps.googleapis.com/maps/api',
+              }}
               enablePoweredByContainer={false}
               styles={{
                 container: {
                   flex: 0,
+                  zIndex: 1000,
                 },
                 textInputContainer: {
                   backgroundColor: 'white',
                   borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: '#ddd',
+                  paddingHorizontal: 10,
+                  borderWidth: 2,
+                  borderColor: currentAddress ? '#4CAF50' : '#E0E0E0',
                 },
                 textInput: {
-                  height: 48,
+                  height: 50,
                   fontSize: 16,
+                  color: '#333',
+                  backgroundColor: 'transparent',
                 },
                 listView: {
+                  position: 'absolute',
+                  top: 55,
+                  left: 0,
+                  right: 0,
                   backgroundColor: 'white',
-                  borderRadius: 8,
-                  borderWidth: 2,
-                  borderColor: '#4A90E2',
-                  marginTop: 4,
-                  elevation: 10,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: '#E0E0E0',
+                  maxHeight: 200,
+                  elevation: 5,
                   shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 5,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 4,
+                  zIndex: 1001,
                 },
                 row: {
                   backgroundColor: 'white',
                   padding: 13,
+                  height: 54,
+                  flexDirection: 'row',
+                },
+                separator: {
+                  height: 0.5,
+                  backgroundColor: '#E0E0E0',
+                },
+                description: {
+                  fontSize: 14,
+                  color: '#333',
+                },
+                loader: {
+                  flexDirection: 'row',
+                  justifyContent: 'flex-end',
+                  height: 20,
                 },
               }}
+              debounce={300}
+              nearbyPlacesAPI="GooglePlacesSearch"
+              GooglePlacesSearchQuery={{
+                rankby: 'distance',
+              }}
             />
-
-            {currentAddress && (
-              <View style={styles.selectedAddress}>
-                <Text style={styles.selectedAddressText}>✓ {currentAddress.description}</Text>
-              </View>
-            )}
           </View>
 
-          {/* New Address Section */}
-          <View style={[styles.section, styles.secondSection]}>
-            <Text style={styles.label}>🎯 Where are you thinking of moving?</Text>
-            <Text style={styles.helperText}>Search for the potential new address</Text>
+          {currentAddress && (
+            <View style={styles.selectedBox}>
+              <Text style={styles.selectedIcon}>✓</Text>
+              <Text style={styles.selectedText}>{currentAddress.description}</Text>
+            </View>
+          )}
+        </View>
 
+        {/* Spacer */}
+        <View style={{ height: currentAddress ? 40 : 80 }} />
+
+        {/* New Address */}
+        <View style={styles.inputSection}>
+          <Text style={styles.label}>🎯 New Address</Text>
+          <Text style={styles.helperText}>Where are you thinking of moving?</Text>
+          
+          <View style={styles.autocompleteWrapper}>
             <GooglePlacesAutocomplete
               ref={newRef}
               placeholder="Start typing the new address..."
+              minLength={2}
+              listViewDisplayed="auto"
+              fetchDetails={true}
               onPress={(data, details = null) => {
-                console.log('Selected new:', data.description);
+                console.log('✅ New address selected:', data.description);
                 if (details) {
-                  // Check if address is in California
-                  const isInCalifornia = details.address_components?.some(
-                    component => 
-                      component.types.includes('administrative_area_level_1') && 
-                      component.short_name === 'CA'
-                  );
-                  
-                  if (!isInCalifornia) {
-                    Alert.alert('California Only', 'Please select an address in California. This app currently only supports California addresses.');
-                    return;
-                  }
-                  
                   setNewAddress({
                     description: data.description,
                     lat: details.geometry.location.lat,
@@ -249,102 +234,112 @@ export default function AddressInputScreen({ navigation }: Props) {
               query={{
                 key: GOOGLE_MAPS_API_KEY,
                 language: 'en',
-                types: 'address',
+                components: 'country:us',
               }}
-              fetchDetails={true}
+              requestUrl={{
+                useOnPlatform: 'web',
+                url: 'https://cors-anywhere.herokuapp.com/https://maps.googleapis.com/maps/api',
+              }}
               enablePoweredByContainer={false}
               styles={{
                 container: {
                   flex: 0,
+                  zIndex: 999,
                 },
                 textInputContainer: {
                   backgroundColor: 'white',
                   borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: '#ddd',
+                  paddingHorizontal: 10,
+                  borderWidth: 2,
+                  borderColor: newAddress ? '#4CAF50' : '#E0E0E0',
                 },
                 textInput: {
-                  height: 48,
+                  height: 50,
                   fontSize: 16,
+                  color: '#333',
+                  backgroundColor: 'transparent',
                 },
                 listView: {
+                  position: 'absolute',
+                  top: 55,
+                  left: 0,
+                  right: 0,
                   backgroundColor: 'white',
-                  borderRadius: 8,
-                  borderWidth: 2,
-                  borderColor: '#E65100',
-                  marginTop: 4,
-                  elevation: 10,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: '#E0E0E0',
+                  maxHeight: 200,
+                  elevation: 5,
                   shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 5,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 4,
+                  zIndex: 1000,
                 },
                 row: {
                   backgroundColor: 'white',
                   padding: 13,
+                  height: 54,
+                  flexDirection: 'row',
+                },
+                separator: {
+                  height: 0.5,
+                  backgroundColor: '#E0E0E0',
+                },
+                description: {
+                  fontSize: 14,
+                  color: '#333',
+                },
+                loader: {
+                  flexDirection: 'row',
+                  justifyContent: 'flex-end',
+                  height: 20,
                 },
               }}
+              debounce={300}
+              nearbyPlacesAPI="GooglePlacesSearch"
+              GooglePlacesSearchQuery={{
+                rankby: 'distance',
+              }}
             />
-
-            {newAddress && (
-              <View style={styles.selectedAddress}>
-                <Text style={styles.selectedAddressText}>✓ {newAddress.description}</Text>
-              </View>
-            )}
           </View>
 
-          {/* Distance Display */}
-          {currentAddress && newAddress && (
-            <View style={styles.distanceCard}>
-              <Text style={styles.distanceText}>
-                📏 Distance:{' '}
-                {calculateDistance(
-                  currentAddress.lat,
-                  currentAddress.lng,
-                  newAddress.lat,
-                  newAddress.lng
-                ).toFixed(1)}{' '}
-                miles apart
-              </Text>
+          {newAddress && (
+            <View style={styles.selectedBox}>
+              <Text style={styles.selectedIcon}>✓</Text>
+              <Text style={styles.selectedText}>{newAddress.description}</Text>
             </View>
           )}
+        </View>
 
-          {/* Map showing both locations */}
-          {currentAddress && newAddress && (
-            <AddressMap currentAddress={currentAddress} newAddress={newAddress} />
-          )}
+        {/* Spacer */}
+        <View style={{ flex: 1 }} />
 
-          {/* Info Card */}
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>💡 What we'll analyze:</Text>
-            <Text style={styles.infoItem}>• Crime rates and safety patterns</Text>
-            <Text style={styles.infoItem}>• Commute time to your work</Text>
-            <Text style={styles.infoItem}>• Noise levels and construction</Text>
-            <Text style={styles.infoItem}>• Nearby amenities matching your lifestyle</Text>
+        {/* Distance Display */}
+        {currentAddress && newAddress && (
+          <View style={styles.distanceCard}>
+            <Text style={styles.distanceIcon}>📏</Text>
+            <Text style={styles.distanceText}>
+              Distance: {calculateDistance(currentAddress.lat, currentAddress.lng, newAddress.lat, newAddress.lng).toFixed(1)} miles
+            </Text>
           </View>
+        )}
 
-          {/* Spacer for bottom button */}
-          <View style={{ height: 20 }} />
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Bottom Button */}
-      <View style={styles.bottomContainer}>
+        {/* Continue Button */}
         <TouchableOpacity
-          style={[
-            styles.continueButton,
-            (!currentAddress || !newAddress) && styles.continueButtonDisabled,
-          ]}
+          style={[styles.continueButton, (!currentAddress || !newAddress) && styles.continueButtonDisabled]}
           onPress={handleContinue}
           disabled={!currentAddress || !newAddress}
         >
           <Text style={styles.continueButtonText}>
-            {currentAddress && newAddress
-              ? 'Continue to Work Schedule'
-              : 'Select Both Addresses'}
+            Continue →
           </Text>
         </TouchableOpacity>
-      </View>
+
+        <View style={{ height: 20 }} />
+        </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -352,32 +347,26 @@ export default function AddressInputScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   header: {
     backgroundColor: '#4A90E2',
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 60,
+    paddingBottom: 30,
     paddingHorizontal: 20,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
-  backButton: {
-    marginBottom: 10,
-  },
-  backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  headerTitle: {
+  title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: 'white',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  headerSubtitle: {
-    fontSize: 14,
+  subtitle: {
+    fontSize: 16,
     color: 'white',
-    opacity: 0.8,
+    opacity: 0.9,
   },
   keyboardView: {
     flex: 1,
@@ -386,88 +375,89 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    flexGrow: 1,
+  },
+  content: {
     padding: 20,
-    paddingBottom: 100,
   },
-  section: {
-    marginBottom: 30,
-  },
-  firstSection: {
-    zIndex: 10,
-  },
-  secondSection: {
-    zIndex: 5,
+  inputSection: {
+    marginBottom: 20,
   },
   label: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   helperText: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  selectedAddress: {
+  autocompleteWrapper: {
+    height: 50,
+    marginBottom: 10,
+  },
+  selectedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#E8F5E9',
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
   },
-  selectedAddressText: {
+  selectedIcon: {
+    fontSize: 18,
+    marginRight: 8,
+    color: '#4CAF50',
+  },
+  selectedText: {
+    flex: 1,
     fontSize: 14,
     color: '#2E7D32',
     fontWeight: '500',
   },
   distanceCard: {
-    backgroundColor: '#FFF3E0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
-    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  distanceIcon: {
+    fontSize: 24,
+    marginRight: 12,
   },
   distanceText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#E65100',
-  },
-  infoCard: {
-    backgroundColor: '#E8F4FD',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 10,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: '600',
     color: '#333',
-    marginBottom: 12,
-  },
-  infoItem: {
-    fontSize: 16,
-    color: '#555',
-    marginBottom: 8,
-    lineHeight: 24,
-  },
-  bottomContainer: {
-    padding: 20,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
   },
   continueButton: {
     backgroundColor: '#4A90E2',
-    padding: 16,
+    padding: 18,
     borderRadius: 12,
     alignItems: 'center',
+    shadowColor: '#4A90E2',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   continueButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#CCCCCC',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   continueButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });

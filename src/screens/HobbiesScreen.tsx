@@ -38,8 +38,6 @@ const ACTIVITY_TIMES = [
 ];
 
 export default function HobbiesScreen({ navigation }: Props) {
-  const { profileData } = useUserProfile();
-  console.log('✅ HS Context working! Data:', profileData);
   const { updateLifestyle } = useUserProfile();
   const [selectedHobbies, setSelectedHobbies] = useState<string[]>([]);
   const [activityTimes, setActivityTimes] = useState<string[]>([]);
