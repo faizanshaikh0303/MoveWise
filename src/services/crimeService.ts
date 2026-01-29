@@ -6,7 +6,7 @@ import * as geofire from 'geofire-common';
 export interface Crime {
   id: string;
   lat: number;
-  lng: number;
+  lng: number; // We standardize to 'lng' internally even if stored as 'lon'
   type: string;
   date: string;
   time: string;
@@ -23,7 +23,7 @@ export async function queryCrimesNearLocation(
 ): Promise<Crime[]> {
   console.log(`🔍 Querying crimes near ${lat}, ${lng} (radius: ${radiusMiles} miles)`);
   
-  // Validate coordinates
+  // Validate and clean coordinates
   if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
     console.error('❌ Invalid coordinates:', { lat, lng });
     return [];
@@ -34,12 +34,20 @@ export async function queryCrimesNearLocation(
     return [];
   }
   
+  // Round coordinates to 6 decimal places (about 0.11 meters precision)
+  // This prevents precision issues with geofire
+  const cleanLat = Math.round(lat * 1000000) / 1000000;
+  const cleanLng = Math.round(lng * 1000000) / 1000000;
+  
+  console.log(`✅ Cleaned coordinates: ${cleanLat}, ${cleanLng}`);
+  
   const radiusMeters = radiusMiles * 1609.34; // Convert miles to meters
-  const center: [number, number] = [lat, lng]; // Explicitly type as tuple
+  const center: [number, number] = [cleanLat, cleanLng]; // Explicitly type as tuple
   
   let bounds;
   try {
     bounds = geofire.geohashQueryBounds(center, radiusMeters);
+    console.log(`✅ Generated ${bounds.length} geohash bounds`);
   } catch (error) {
     console.error('❌ Error generating geohash bounds:', error);
     console.log('Center value:', center, 'Types:', typeof center[0], typeof center[1]);
@@ -50,41 +58,161 @@ export async function queryCrimesNearLocation(
   
   try {
     for (const bound of bounds) {
-      const q = query(
-        collection(db, 'crime_data_la'),
-        where('geohash', '>=', bound[0]),
-        where('geohash', '<=', bound[1])
-      );
+      // Validate bound before using it
+      if (!bound || bound.length !== 2 || typeof bound[0] !== 'string' || typeof bound[1] !== 'string') {
+        console.warn('⚠️ Skipping invalid bound:', bound);
+        continue;
+      }
       
-      const snapshot = await getDocs(q);
-      
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        const docLat = data.lat;
-        const docLng = data.lng;
+      try {
+        const q = query(
+          collection(db, 'crime_data_la'),
+          where('geohash', '>=', bound[0]),
+          where('geohash', '<=', bound[1])
+        );
         
-        // Calculate distance to verify it's within radius
-        const distanceInM = geofire.distanceBetween([docLat, docLng], center);
-        const distanceInMiles = distanceInM / 1609.34;
+        const snapshot = await getDocs(q);
         
-        if (distanceInMiles <= radiusMiles) {
-          crimes.push({
-            id: doc.id,
-            lat: docLat,
-            lng: docLng,
-            type: data.type || 'unknown',
-            date: data.date || '',
-            time: data.time || '',
-            geohash: data.geohash || '',
-          });
-        }
-      });
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          
+          // Get coordinates - database uses 'lon' not 'lng'
+          let docLat = data.lat;
+          let docLng = data.lon || data.lng || data.longitude; // Try common variations
+          
+          // Check if coordinates exist at all
+          if (docLat === undefined || docLat === null || docLng === undefined || docLng === null) {
+            // Skip silently - these are bad data
+            return;
+          }
+          
+          // Convert to numbers if they're strings
+          if (typeof docLat === 'string') docLat = parseFloat(docLat);
+          if (typeof docLng === 'string') docLng = parseFloat(docLng);
+          
+          // Validate after conversion
+          if (typeof docLat !== 'number' || typeof docLng !== 'number' || isNaN(docLat) || isNaN(docLng)) {
+            return;
+          }
+          
+          // Calculate distance to verify it's within radius
+          try {
+            const distanceInM = geofire.distanceBetween([docLat, docLng], [cleanLat, cleanLng]);
+            const distanceInMiles = distanceInM / 1609.34;
+            
+            if (distanceInMiles <= radiusMiles) {
+              crimes.push({
+                id: doc.id,
+                lat: docLat,
+                lng: docLng, // Standardize to 'lng' in our Crime interface
+                type: data.type || 'unknown',
+                date: data.date || '',
+                time: data.time || data.hour?.toString() || '', // Use 'hour' field if 'time' doesn't exist
+                geohash: data.geohash || '',
+              });
+            }
+          } catch (distError) {
+            // Skip crimes with distance calculation errors
+            return;
+          }
+        });
+      } catch (boundError) {
+        console.warn('⚠️ Error querying bound:', bound, boundError);
+        // Continue with next bound instead of failing entirely
+        continue;
+      }
     }
     
     console.log(`✅ Found ${crimes.length} crimes within ${radiusMiles} mile(s)`);
     return crimes;
   } catch (error) {
     console.error('❌ Error querying crimes:', error);
+    console.log('⚠️ Attempting fallback bounding box query...');
+    
+    // Fallback: Use simple bounding box instead of geohash
+    return await fallbackBoundingBoxQuery(cleanLat, cleanLng, radiusMiles);
+  }
+}
+
+/**
+ * Fallback method using bounding box instead of geohash
+ */
+async function fallbackBoundingBoxQuery(
+  lat: number,
+  lng: number,
+  radiusMiles: number
+): Promise<Crime[]> {
+  try {
+    // Calculate bounding box (approximate)
+    const latDegreePerMile = 1 / 69; // 1 degree latitude = ~69 miles
+    const lngDegreePerMile = 1 / (69 * Math.cos((lat * Math.PI) / 180)); // Adjusted for latitude
+    
+    const latMin = lat - (radiusMiles * latDegreePerMile);
+    const latMax = lat + (radiusMiles * latDegreePerMile);
+    const lngMin = lng - (radiusMiles * lngDegreePerMile);
+    const lngMax = lng + (radiusMiles * lngDegreePerMile);
+    
+    console.log(`📦 Bounding box: lat ${latMin} to ${latMax}, lng ${lngMin} to ${lngMax}`);
+    
+    // Query crimes within bounding box
+    const q = query(
+      collection(db, 'crime_data_la'),
+      where('lat', '>=', latMin),
+      where('lat', '<=', latMax)
+    );
+    
+    const snapshot = await getDocs(q);
+    const crimes: Crime[] = [];
+    
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      
+      // Get coordinates - database uses 'lon' not 'lng'
+      let docLat = data.lat;
+      let docLng = data.lon || data.lng || data.longitude;
+      
+      // Convert to numbers if they're strings
+      if (typeof docLat === 'string') docLat = parseFloat(docLat);
+      if (typeof docLng === 'string') docLng = parseFloat(docLng);
+      
+      // Validate coordinates
+      if (typeof docLat !== 'number' || typeof docLng !== 'number' || isNaN(docLat) || isNaN(docLng)) {
+        return;
+      }
+      
+      // Check if within longitude bounds
+      if (docLng < lngMin || docLng > lngMax) {
+        return;
+      }
+      
+      // Calculate actual distance
+      const R = 3959; // Earth's radius in miles
+      const dLat = (docLat - lat) * (Math.PI / 180);
+      const dLng = (docLng - lng) * (Math.PI / 180);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat * (Math.PI / 180)) * Math.cos(docLat * (Math.PI / 180)) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      
+      if (distance <= radiusMiles) {
+        crimes.push({
+          id: doc.id,
+          lat: docLat,
+          lng: docLng, // Standardize to 'lng' in our interface
+          type: data.type || 'unknown',
+          date: data.date || '',
+          time: data.time || data.hour?.toString() || '',
+          geohash: data.geohash || '',
+        });
+      }
+    });
+    
+    console.log(`✅ Fallback found ${crimes.length} crimes`);
+    return crimes;
+  } catch (error) {
+    console.error('❌ Fallback query also failed:', error);
     return [];
   }
 }

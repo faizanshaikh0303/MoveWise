@@ -1,5 +1,7 @@
 // Analysis Service - Combines all data sources for comprehensive lifestyle impact analysis
 import { queryCrimesNearLocation, analyzeCrimeByHour, calculateCrimeScore, calculateUserExposure } from './crimeService';
+import { analyzeRealNoiseLevels } from './noiseService';
+import { analyzeRealAmenities, calculateLifestyleScore } from './amenitiesService';
 import { generatePersonalizedInsights, AnalysisData, GroqInsight } from './groqService';
 
 export interface ComprehensiveAnalysis {
@@ -141,19 +143,32 @@ export async function analyzeMove(
     exposure: newExposure.exposure,
   };
 
-  // 2. Analyze Noise Levels
-  console.log('🔊 Analyzing noise levels...');
-  const currentNoise = await analyzeNoiseLevels(
+  // 2. Analyze Noise Levels (REAL DATA from Google Places API)
+  console.log('🔊 Analyzing noise levels with real data...');
+  const currentNoiseAnalysis = await analyzeRealNoiseLevels(
     currentLat,
     currentLng,
     userProfile.sleep
   );
 
-  const newNoise = await analyzeNoiseLevels(
+  const newNoiseAnalysis = await analyzeRealNoiseLevels(
     newLat,
     newLng,
     userProfile.sleep
   );
+  
+  // Convert to expected format
+  const currentNoise = {
+    level: currentNoiseAnalysis.level,
+    sources: currentNoiseAnalysis.sources,
+    sleepImpact: currentNoiseAnalysis.sleepImpact,
+  };
+  
+  const newNoise = {
+    level: newNoiseAnalysis.level,
+    sources: newNoiseAnalysis.sources,
+    sleepImpact: newNoiseAnalysis.sleepImpact,
+  };
 
   // 3. Analyze Commute
   console.log('🚗 Analyzing commute times...');
@@ -163,12 +178,19 @@ export async function analyzeMove(
     userProfile.work
   );
 
-  // 4. Analyze Lifestyle Match
-  console.log('🎯 Analyzing lifestyle compatibility...');
-  const lifestyleScore = await analyzeLifestyleMatch(
-    userProfile.addresses.new,
-    userProfile.lifestyle
+  // 4. Analyze Lifestyle Match (REAL DATA from Google Places API)
+  console.log('🎯 Analyzing lifestyle compatibility with real amenities...');
+  const amenitiesAnalysis = await analyzeRealAmenities(
+    newLat,
+    newLng,
+    userProfile.lifestyle.hobbies
   );
+  
+  const lifestyleScore = {
+    overall: calculateLifestyleScore(amenitiesAnalysis),
+    amenitiesNearby: amenitiesAnalysis.hobbiesMatch,
+    walkability: amenitiesAnalysis.walkability,
+  };
 
   // 5. Generate AI Insights with Groq
   console.log('🤖 Generating AI insights...');
@@ -364,34 +386,6 @@ async function analyzeCommute(
     newTime,
     change,
     impact,
-  };
-}
-
-/**
- * Analyze lifestyle compatibility (mock implementation)
- */
-async function analyzeLifestyleMatch(
-  newAddress: { lat: number; lng: number },
-  lifestyle: UserProfile['lifestyle']
-): Promise<{ overall: number; amenitiesNearby: { [hobby: string]: boolean }; walkability: number }> {
-  // Mock implementation - would use Google Places API in production
-  
-  const amenitiesNearby: { [hobby: string]: boolean } = {};
-  let foundCount = 0;
-  
-  lifestyle.hobbies.forEach(hobby => {
-    const found = Math.random() > 0.3; // 70% chance of finding amenity
-    amenitiesNearby[hobby] = found;
-    if (found) foundCount++;
-  });
-  
-  const overall = Math.min(10, (foundCount / lifestyle.hobbies.length) * 10 + 2);
-  const walkability = Math.floor(Math.random() * 4) + 5; // 5-8
-  
-  return {
-    overall: Math.round(overall * 10) / 10,
-    amenitiesNearby,
-    walkability,
   };
 }
 
