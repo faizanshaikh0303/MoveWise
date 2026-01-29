@@ -8,10 +8,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  LogBox,
 } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { GOOGLE_MAPS_API_KEY } from '@env';
 import { useUserProfile } from '../context/UserProfileContext';
+
+// Suppress VirtualizedList warning (safe for Google Places Autocomplete)
+LogBox.ignoreLogs([
+  'VirtualizedLists should never be nested',
+]);
 
 type Props = {
   navigation: any;
@@ -118,6 +124,22 @@ export default function AddressInputScreen({ navigation }: Props) {
               onPress={(data, details = null) => {
                 console.log('✅ Current address selected:', data.description);
                 if (details) {
+                  // Check if address is in California
+                  const isInCalifornia = details.address_components?.some(
+                    component => 
+                      component.types.includes('administrative_area_level_1') && 
+                      component.short_name === 'CA'
+                  );
+                  
+                  if (!isInCalifornia) {
+                    Alert.alert(
+                      'California Only', 
+                      'Please select an address in California. This app currently only supports California addresses.',
+                      [{ text: 'OK' }]
+                    );
+                    return;
+                  }
+                  
                   setCurrentAddress({
                     description: data.description,
                     lat: details.geometry.location.lat,
@@ -207,7 +229,7 @@ export default function AddressInputScreen({ navigation }: Props) {
         </View>
 
         {/* Spacer */}
-        <View style={{ height: currentAddress ? 40 : 80 }} />
+        <View style={{ height: 20 }} />
 
         {/* New Address */}
         <View style={styles.inputSection}>
@@ -224,6 +246,22 @@ export default function AddressInputScreen({ navigation }: Props) {
               onPress={(data, details = null) => {
                 console.log('✅ New address selected:', data.description);
                 if (details) {
+                  // Check if address is in California
+                  const isInCalifornia = details.address_components?.some(
+                    component => 
+                      component.types.includes('administrative_area_level_1') && 
+                      component.short_name === 'CA'
+                  );
+                  
+                  if (!isInCalifornia) {
+                    Alert.alert(
+                      'California Only', 
+                      'Please select an address in California. This app currently only supports California addresses.',
+                      [{ text: 'OK' }]
+                    );
+                    return;
+                  }
+                  
                   setNewAddress({
                     description: data.description,
                     lat: details.geometry.location.lat,

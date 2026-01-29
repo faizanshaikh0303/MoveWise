@@ -1,17 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  TextInput,
   Alert,
   Platform,
   Modal,
+  LogBox,
+  KeyboardAvoidingView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+import { GOOGLE_MAPS_API_KEY } from '@env';
 import { useUserProfile } from '../context/UserProfileContext';
+
+// Suppress VirtualizedList warning
+LogBox.ignoreLogs([
+  'VirtualizedLists should never be nested',
+]);
 
 type Props = {
   navigation: any;
@@ -42,6 +50,9 @@ export default function WorkScheduleScreen({ navigation }: Props) {
   // Modal states for iOS
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+
+  // Ref for Google Places
+  const workAddressRef = useRef<any>(null);
 
   const formatTime = (date: Date): string => {
     const hours = date.getHours().toString().padStart(2, '0');
@@ -177,13 +188,19 @@ export default function WorkScheduleScreen({ navigation }: Props) {
         <Text style={styles.headerSubtitle}>Step 2 of 4</Text>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         {/* Work Location Section */}
-        <View style={styles.section}>
+        <View style={[styles.section, styles.workLocationSection]}>
           <Text style={styles.sectionTitle}>Where do you work?</Text>
 
           <TouchableOpacity
@@ -207,13 +224,100 @@ export default function WorkScheduleScreen({ navigation }: Props) {
           {!workFromHome && (
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Work Address</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Enter your work address..."
-                placeholderTextColor="#999"
-                value={workLocation}
-                onChangeText={setWorkLocation}
-              />
+              <View style={styles.autocompleteWrapper}>
+                <GooglePlacesAutocomplete
+                  ref={workAddressRef}
+                  placeholder="Start typing your work address..."
+                  minLength={2}
+                  listViewDisplayed="auto"
+                  fetchDetails={true}
+                  onPress={(data, details = null) => {
+                    console.log('✅ Work address selected:', data.description);
+                    if (details) {
+                      // Check if address is in California
+                      const isInCalifornia = details.address_components?.some(
+                        component => 
+                          component.types.includes('administrative_area_level_1') && 
+                          component.short_name === 'CA'
+                      );
+                      
+                      if (!isInCalifornia) {
+                        Alert.alert(
+                          'California Only', 
+                          'Please select a work address in California. This app currently only supports California addresses.',
+                          [{ text: 'OK' }]
+                        );
+                        return;
+                      }
+                      
+                      setWorkLocation(data.description);
+                    }
+                  }}
+                  query={{
+                    key: GOOGLE_MAPS_API_KEY,
+                    language: 'en',
+                    components: 'country:us',
+                  }}
+                  enablePoweredByContainer={false}
+                  styles={{
+                    container: {
+                      flex: 0,
+                      zIndex: 1000,
+                    },
+                    textInputContainer: {
+                      backgroundColor: 'white',
+                      borderRadius: 12,
+                      paddingHorizontal: 10,
+                      borderWidth: 2,
+                      borderColor: workLocation ? '#4CAF50' : '#E0E0E0',
+                    },
+                    textInput: {
+                      height: 50,
+                      fontSize: 16,
+                      color: '#333',
+                      backgroundColor: 'transparent',
+                    },
+                    listView: {
+                      position: 'absolute',
+                      top: 55,
+                      left: 0,
+                      right: 0,
+                      backgroundColor: 'white',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: '#E0E0E0',
+                      maxHeight: 200,
+                      elevation: 5,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.25,
+                      shadowRadius: 4,
+                      zIndex: 1001,
+                    },
+                    row: {
+                      backgroundColor: 'white',
+                      padding: 13,
+                      height: 54,
+                      flexDirection: 'row',
+                    },
+                    separator: {
+                      height: 0.5,
+                      backgroundColor: '#E0E0E0',
+                    },
+                    description: {
+                      fontSize: 14,
+                      color: '#333',
+                    },
+                  }}
+                  debounce={300}
+                />
+              </View>
+              {workLocation && (
+                <View style={styles.selectedAddress}>
+                  <Text style={styles.selectedIcon}>✓</Text>
+                  <Text style={styles.selectedText}>{workLocation}</Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -311,6 +415,7 @@ export default function WorkScheduleScreen({ navigation }: Props) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -342,6 +447,9 @@ const styles = StyleSheet.create({
     color: 'white',
     opacity: 0.9,
   },
+  keyboardView: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },
@@ -350,6 +458,9 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 24,
+  },
+  workLocationSection: {
+    zIndex: 1000,
   },
   sectionTitle: {
     fontSize: 20,
@@ -423,6 +534,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#666',
     marginBottom: 8,
+  },
+  autocompleteWrapper: {
+    height: 50,
+    marginBottom: 10,
+  },
+  selectedAddress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  selectedIcon: {
+    fontSize: 18,
+    marginRight: 8,
+    color: '#4CAF50',
+  },
+  selectedText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#2E7D32',
+    fontWeight: '500',
   },
   textInput: {
     backgroundColor: 'white',

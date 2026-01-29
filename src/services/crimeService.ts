@@ -23,9 +23,28 @@ export async function queryCrimesNearLocation(
 ): Promise<Crime[]> {
   console.log(`🔍 Querying crimes near ${lat}, ${lng} (radius: ${radiusMiles} miles)`);
   
+  // Validate coordinates
+  if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+    console.error('❌ Invalid coordinates:', { lat, lng });
+    return [];
+  }
+  
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    console.error('❌ Coordinates out of range:', { lat, lng });
+    return [];
+  }
+  
   const radiusMeters = radiusMiles * 1609.34; // Convert miles to meters
   const center: [number, number] = [lat, lng]; // Explicitly type as tuple
-  const bounds = geofire.geohashQueryBounds(center, radiusMeters);
+  
+  let bounds;
+  try {
+    bounds = geofire.geohashQueryBounds(center, radiusMeters);
+  } catch (error) {
+    console.error('❌ Error generating geohash bounds:', error);
+    console.log('Center value:', center, 'Types:', typeof center[0], typeof center[1]);
+    return [];
+  }
   
   const crimes: Crime[] = [];
   

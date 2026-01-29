@@ -88,15 +88,27 @@ export async function analyzeMove(
 
   // 1. Analyze Crime Data
   console.log('📊 Analyzing crime data...');
+  console.log('Current address coordinates:', userProfile.addresses.current);
+  console.log('New address coordinates:', userProfile.addresses.new);
+  
+  // Ensure coordinates are numbers (handle potential string values)
+  const currentLat = Number(userProfile.addresses.current.lat);
+  const currentLng = Number(userProfile.addresses.current.lng);
+  const newLat = Number(userProfile.addresses.new.lat);
+  const newLng = Number(userProfile.addresses.new.lng);
+  
+  console.log('Converted - Current:', currentLat, currentLng);
+  console.log('Converted - New:', newLat, newLng);
+  
   const currentCrimes = await queryCrimesNearLocation(
-    userProfile.addresses.current.lat,
-    userProfile.addresses.current.lng,
+    currentLat,
+    currentLng,
     5 // 5 mile radius for more comprehensive data
   );
   
   const newCrimes = await queryCrimesNearLocation(
-    userProfile.addresses.new.lat,
-    userProfile.addresses.new.lng,
+    newLat,
+    newLng,
     5
   );
 
@@ -132,14 +144,14 @@ export async function analyzeMove(
   // 2. Analyze Noise Levels
   console.log('🔊 Analyzing noise levels...');
   const currentNoise = await analyzeNoiseLevels(
-    userProfile.addresses.current.lat,
-    userProfile.addresses.current.lng,
+    currentLat,
+    currentLng,
     userProfile.sleep
   );
 
   const newNoise = await analyzeNoiseLevels(
-    userProfile.addresses.new.lat,
-    userProfile.addresses.new.lng,
+    newLat,
+    newLng,
     userProfile.sleep
   );
 
